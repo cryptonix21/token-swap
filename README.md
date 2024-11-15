@@ -33,7 +33,8 @@ Add the following content to the .env file:
 
 
 ```bash
-xDai Token: 0xe91D153E0b41518A2Ce8Dd3D7944Fa863463a97d
+wXdai Token: 0xe91D153E0b41518A2Ce8Dd3D7944Fa863463a97d
+wEth Token: 0x6A023CCd1ff6F2045C3309768eAd9E68F978f6e1
 HoneySwap Router: 0x1C232F01118CB8B424793ae03F870aa7D0ac7f77
 ```
 
