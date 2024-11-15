@@ -1,4 +1,3 @@
-// src/getRandomToken.js
 export async function getRandomToken() {
   try {
     const response = await fetch("https://tokens.honeyswap.org/");

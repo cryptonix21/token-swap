@@ -1,4 +1,3 @@
-// src/connectWallet.js
 import { ethers } from "ethers";
 
 export async function connectWallet() {

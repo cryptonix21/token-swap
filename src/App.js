@@ -1,47 +1,83 @@
 import React, { useState } from "react";
 import { ethers } from "ethers";
-import { connectWallet } from "./connectWallet";
-import { getRandomToken } from "./randomToken";
-import "./App.css"; // For getting random tokens
+import { connectWallet } from "./utils/connectWallet";
+import "./App.css";
 
-// xDai Address (using the address you provided)
-const xdaiAddress = "0xe91D153E0b41518A2Ce8Dd3D7944Fa863463a97d"; // xDai Address
-const honeyswapRouterAddress = "0x1C232F01118CB8B424793ae03F870aa7D0ac7f77"; // HoneySwap Router
+// wXDAI and wETH Addresses
+const wxdaiAddress = "0xe91D153E0b41518A2Ce8Dd3D7944Fa863463a97d";
+const wethAddress = "0x6A023CCd1ff6F2045C3309768eAd9E68F978f6e1";
+
+// HoneySwap Router
+const honeyswapRouterAddress = "0x1C232F01118CB8B424793ae03F870aa7D0ac7f77";
 
 export default function App() {
-  const [amount, setAmount] = useState(""); // Amount in xDai
+  const [amount, setAmount] = useState(""); // Amount in wXDAI
   const [connected, setConnected] = useState(false);
   const [signer, setSigner] = useState(null);
-  const [randomToken, setRandomToken] = useState(null); // Random token state
-  const [nativeBalance, setNativeBalance] = useState(""); // Native balance in ETH/xDai
-  const [randomTokenAmount, setRandomTokenAmount] = useState(""); // Amount of random token
+  const [nativeBalance, setNativeBalance] = useState("");
+  const [wethBalance, setWethBalance] = useState(""); // Native wXDAI balance
+  const [tokenAmount, setTokenAmount] = useState(""); // Amount of wETH
 
   // Connect wallet and set signer
   const handleConnectWallet = async () => {
-    const signer = await connectWallet();
-    if (signer) {
-      setSigner(signer);
-      setConnected(true);
-      await fetchNativeBalance();
+    try {
+      const signer = await connectWallet();
+      if (signer) {
+        setSigner(signer); // Update the state
+        setConnected(true);
+        console.log("Signer initialized:", signer);
+
+        await fetchNativeBalance(signer); // Pass signer directly
+        console.log("after fetchNativeBalance");
+      }
+    } catch (error) {
+      console.error("Wallet connection failed:", error);
     }
   };
 
-  // Fetch native balance
-  const fetchNativeBalance = async () => {
+  // Updated fetchNativeBalance to accept signer as an argument
+  const fetchNativeBalance = async (signer) => {
     try {
       const provider = new ethers.providers.Web3Provider(window.ethereum);
-      const signer = provider.getSigner();
-      const balance = await signer.getBalance();
-      const balanceInEth = ethers.utils.formatEther(balance); // Convert to ETH/xDai
+      const address = await signer.getAddress();
+
+      const wxdaiAddress = "0xe91D153E0b41518A2Ce8Dd3D7944Fa863463a97d"; // Replace with actual wXDAI contract address
+      const erc20ABI = [
+        "function balanceOf(address account) view returns (uint256)",
+      ];
+      const wxdaiContract = new ethers.Contract(
+        wxdaiAddress,
+        erc20ABI,
+        provider
+      );
+
+      const wethContract = new ethers.Contract(wethAddress, erc20ABI, provider);
+
+      const wethBalance1 = await wethContract.balanceOf(address);
+
+      // Fetch balance of wXDAI
+      const balance = await wxdaiContract.balanceOf(address);
+
+      // Format the balance from Wei to Ether (18 decimals)
+      const balanceInEth = ethers.utils.formatEther(balance);
+
+      // Fetch balance of wETH
+
+      const balanceInWeth = ethers.utils.formatEther(wethBalance1);
+
+      console.log("Fetched wXDAI balance:", balanceInEth);
+      console.log("Fetched wETH balance:", balanceInWeth);
+
       setNativeBalance(balanceInEth);
+      setWethBalance(balanceInWeth);
     } catch (error) {
-      console.error("Failed to fetch native balance:", error);
+      console.error("Failed to fetch wXDAI balance:", error);
     }
   };
 
-  // Function to get the Random Token equivalent for the given xDai amount
-  const getRandomTokenFromXDAI = async (xdaiAmount) => {
-    if (!randomToken || !signer || !xdaiAmount) return;
+  // Function to get wETH equivalent for the given wXDAI amount
+  const getTokenFromWXDAI = async (wxdaiAmount) => {
+    if (!signer || !wxdaiAmount) return;
 
     const provider = new ethers.providers.Web3Provider(window.ethereum);
     const router = new ethers.Contract(
@@ -53,41 +89,85 @@ export default function App() {
     );
 
     try {
-      const path = [xdaiAddress, randomToken.address];
+      const path = [wxdaiAddress, wethAddress];
       const amountsOut = await router.getAmountsOut(
-        ethers.utils.parseUnits(xdaiAmount, 18),
+        ethers.utils.parseUnits(wxdaiAmount, 18),
         path
       );
       const tokenAmount = ethers.utils.formatUnits(amountsOut[1], 18);
-      setRandomTokenAmount(tokenAmount);
+      setTokenAmount(tokenAmount);
     } catch (error) {
-      console.error("Error fetching random token equivalent:", error);
+      console.error("Error fetching wETH equivalent:", error);
     }
   };
 
   const handleAmountChange = (e) => {
-    const xdaiAmount = e.target.value;
-    setAmount(xdaiAmount);
-    getRandomTokenFromXDAI(xdaiAmount);
+    const wxdaiAmount = e.target.value;
+    setAmount(wxdaiAmount);
+    getTokenFromWXDAI(wxdaiAmount);
   };
 
-  const handleGetRandomToken = async () => {
-    const token = await getRandomToken();
-    if (token && token.address) {
-      setRandomToken(token);
-      setRandomTokenAmount("");
-      setAmount("");
-    } else {
-      console.error("Random token is not valid:", token);
+  // Approve the tokens to the router contract
+  const approveWXdaiToken = async (tokenAddress, amountIn) => {
+    if (!signer || !tokenAddress || !amountIn) {
+      console.error("Missing signer, token address, or amount");
+      return;
+    }
+
+    const tokenContract = new ethers.Contract(
+      tokenAddress,
+      [
+        "function approve(address spender, uint256 amount) public returns (bool)",
+      ],
+      signer
+    );
+
+    try {
+      const tx = await tokenContract.approve(
+        honeyswapRouterAddress,
+        ethers.utils.parseUnits(amountIn, 18)
+      );
+      await tx.wait();
+      console.log("Tokens approved for swap!");
+    } catch (error) {
+      console.error("Approval failed:", error);
+    }
+  };
+  const approveWethToken = async (tokenAddress, amountIn) => {
+    if (!signer || !tokenAddress || !amountIn) {
+      console.error("Missing signer, token address, or amount");
+      return;
+    }
+
+    const tokenContract = new ethers.Contract(
+      tokenAddress,
+      [
+        "function approve(address spender, uint256 amount) public returns (bool)",
+      ],
+      signer
+    );
+
+    try {
+      const tx = await tokenContract.approve(
+        honeyswapRouterAddress,
+        ethers.utils.parseUnits(amountIn, 18)
+      );
+      await tx.wait();
+      console.log("Tokens approved for swap!");
+    } catch (error) {
+      console.error("Approval failed:", error);
     }
   };
 
-  // First swap from xDai to random token
+  // Swap from wXDAI to wETH
   const swapTokens = async (amountIn, tokenIn, tokenOut) => {
     if (!signer) {
       console.error("Signer is not provided.");
       return;
     }
+
+    // Approve the token before swapping
+    await approveWXdaiToken(tokenIn, amountIn);
 
     const router = new ethers.Contract(
       honeyswapRouterAddress,
@@ -110,19 +190,21 @@ export default function App() {
         await signer.getAddress(),
         deadline
       );
-      await tx.wait();
-      console.log("First swap completed successfully.");
+      const receipt = await tx.wait();
+      console.log("First swap (wXdai -> wEth) ) completed!", receipt);
+      console.log("Swap completed successfully.");
     } catch (error) {
-      console.error("First swap failed:", error);
+      console.error("Swap failed:", error);
     }
   };
-
-  // Second swap from random token back to xDai
-  const swapBackToXDAI = async (randomTokenAmount) => {
-    if (!signer || !randomToken) {
-      console.error("Signer or random token is not provided.");
+  const swapBackTokens = async (amountIn, tokenIn, tokenOut) => {
+    if (!signer) {
+      console.error("Signer is not provided.");
       return;
     }
+
+    // Approve the token before swapping
+    await approveWethToken(tokenIn, amountIn);
 
     const router = new ethers.Contract(
       honeyswapRouterAddress,
@@ -132,10 +214,10 @@ export default function App() {
       signer
     );
 
-    const path = [randomToken.address, xdaiAddress];
+    const path = [tokenIn, tokenOut];
     const deadline = Math.floor(Date.now() / 1000) + 60 * 20;
 
-    const amountInParsed = ethers.utils.parseUnits(randomTokenAmount, 18);
+    const amountInParsed = ethers.utils.parseUnits(amountIn, 18);
 
     try {
       const tx = await router.swapExactTokensForTokens(
@@ -145,23 +227,22 @@ export default function App() {
         await signer.getAddress(),
         deadline
       );
-      await tx.wait();
-      console.log("Second swap back to xDai completed successfully.");
+      const receipt = await tx.wait();
+      console.log("First swap (wETH -> wXDAI) ) completed!", receipt);
+      console.log("Swap Back completed successfully.");
     } catch (error) {
-      console.error("Second swap failed:", error);
+      console.error("Swap failed:", error);
     }
   };
 
   const handleSwap = async () => {
-    if (!signer || !randomToken) {
-      alert("Please connect your wallet and get a random token first.");
+    if (!signer) {
+      alert("Please connect your wallet first.");
       return;
     }
 
-    await swapTokens(amount, xdaiAddress, randomToken.address);
-
-    // Automatically perform the second swap from random token back to xDai
-    await swapBackToXDAI(randomTokenAmount);
+    await swapTokens(amount, wxdaiAddress, wethAddress);
+    await swapBackTokens(tokenAmount, wethAddress, wxdaiAddress);
   };
 
   return (
@@ -181,33 +262,26 @@ export default function App() {
               value={amount}
               onChange={handleAmountChange}
             />
-            <span>XDAI</span>
+            <span>wXDAI</span>
           </div>
           <div className="balance-section">
-            <p>Native Balance: {nativeBalance} XDAI</p>
+            <p>WXDAI Balance: {nativeBalance} wXDAI</p>
           </div>
           <div className="input-section">
             <input
               type="number"
               placeholder="0.0"
               className="input-field"
-              value={randomTokenAmount}
+              value={tokenAmount}
               disabled
             />
-            <span>{randomToken ? randomToken.symbol : "Token"}</span>
+            <span>WETH</span>
           </div>
-          <button className="action-button" onClick={handleGetRandomToken}>
-            Get Random Token
-          </button>
-          {randomToken && (
-            <div className="token-info">
-              <p>
-                Random Token: {randomToken.name} ({randomToken.symbol})
-              </p>
-            </div>
-          )}
+          <div className="balance-section">
+            <p>WETH Balance: {wethBalance} wXDAI</p>
+          </div>
           <button className="action-button" onClick={handleSwap}>
-            Swap XDAI for {randomToken ? randomToken.symbol : "Token"} and Back
+            Swap wXDAI for wETH
           </button>
         </div>
       )}
