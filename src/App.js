@@ -1,6 +1,9 @@
 import React, { useState } from "react";
 import { ethers } from "ethers";
 import { connectWallet } from "./utils/connectWallet";
+import { toast, ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+
 import "./App.css";
 
 // wXDAI and wETH Addresses
@@ -128,14 +131,14 @@ export default function App() {
         ethers.utils.parseUnits(amountIn, 18)
       );
       await tx.wait();
-      console.log("Tokens approved for swap!");
+      toast.success("wXDAI approved for swap!");
     } catch (error) {
-      console.error("Approval failed:", error);
+      toast.error("Approval failed. See console for details.");
     }
   };
   const approveWethToken = async (tokenAddress, amountIn) => {
     if (!signer || !tokenAddress || !amountIn) {
-      console.error("Missing signer, token address, or amount");
+      toast.error("Signer is not provided.");
       return;
     }
 
@@ -148,21 +151,22 @@ export default function App() {
     );
 
     try {
+      await new Promise((resolve) => setTimeout(resolve, 5000));
       const tx = await tokenContract.approve(
         honeyswapRouterAddress,
         ethers.utils.parseUnits(amountIn, 18)
       );
       await tx.wait();
-      console.log("Tokens approved for swap!");
+      toast.success("wETH approved for swap!");
     } catch (error) {
-      console.error("Approval failed:", error);
+      toast.error("Approval failed. See console for details.");
     }
   };
 
   // Swap from wXDAI to wETH
   const swapTokens = async (amountIn, tokenIn, tokenOut) => {
     if (!signer) {
-      console.error("Signer is not provided.");
+      toast.error("Signer is not provided.");
       return;
     }
 
@@ -183,6 +187,7 @@ export default function App() {
     const amountInParsed = ethers.utils.parseUnits(amountIn, 18);
 
     try {
+      await new Promise((resolve) => setTimeout(resolve, 6000));
       const tx = await router.swapExactTokensForTokens(
         amountInParsed,
         0,
@@ -192,14 +197,14 @@ export default function App() {
       );
       const receipt = await tx.wait();
       console.log("First swap (wXdai -> wEth) ) completed!", receipt);
-      console.log("Swap completed successfully.");
+      toast.success("Swap completed successfully.");
     } catch (error) {
-      console.error("Swap failed:", error);
+      toast.error("Swap failed");
     }
   };
   const swapBackTokens = async (amountIn, tokenIn, tokenOut) => {
     if (!signer) {
-      console.error("Signer is not provided.");
+      toast.success("Signer is not provided.");
       return;
     }
 
@@ -220,6 +225,7 @@ export default function App() {
     const amountInParsed = ethers.utils.parseUnits(amountIn, 18);
 
     try {
+      await new Promise((resolve) => setTimeout(resolve, 5000));
       const tx = await router.swapExactTokensForTokens(
         amountInParsed,
         0,
@@ -228,10 +234,14 @@ export default function App() {
         deadline
       );
       const receipt = await tx.wait();
-      console.log("First swap (wETH -> wXDAI) ) completed!", receipt);
-      console.log("Swap Back completed successfully.");
+      console.log("Second swap (wETH -> wXDAI) ) completed!", receipt);
+      toast.success("Swap Back completed successfully.");
+      // Wait for 5 seconds, then refresh the page
+      setTimeout(() => {
+        window.location.reload();
+      }, 10000);
     } catch (error) {
-      console.error("Swap failed:", error);
+      toast.error("Swap failed");
     }
   };
 
@@ -247,6 +257,7 @@ export default function App() {
 
   return (
     <div className="container">
+      <ToastContainer />
       <h1>Token Swap</h1>
       {!connected ? (
         <button className="connect-button" onClick={handleConnectWallet}>
